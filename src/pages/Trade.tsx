@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Search, TrendingUp, TrendingDown, ShoppingCart, Minus, Filter, BarChart3, Calendar, DollarSign, Building, Info } from 'lucide-react'
 import { usePortfolio } from '../hooks/usePortfolio'
-import { useRealTimeMarketData } from '../hooks/useRealTimeMarketData'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import RiskAlignmentModal from '../components/RiskAlignmentModal'
@@ -48,7 +47,6 @@ interface InvestmentOption {
 const Trade: React.FC = () => {
   const { user } = useAuth()
   const { portfolio, holdings, buyStock, sellStock, userBalances } = usePortfolio()
-  const { quotes, historicalData, fetchQuotes, fetchHistoricalData } = useRealTimeMarketData()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedStock, setSelectedStock] = useState<InvestmentOption | null>(null)
   const [tradeType, setTradeType] = useState<'buy' | 'sell'>('buy')
@@ -72,26 +70,6 @@ const Trade: React.FC = () => {
   useEffect(() => {
     filterInvestments()
   }, [searchTerm, selectedType, selectedRisk, investments])
-
-  // Update investment prices with real-time data
-  useEffect(() => {
-    if (quotes.length > 0 && investments.length > 0) {
-      const updatedInvestments = investments.map(investment => {
-        const quote = quotes.find(q => q.symbol === investment.symbol)
-        if (quote) {
-          return {
-            ...investment,
-            current_price: quote.current_price,
-            price_change: quote.price_change,
-            price_change_percent: quote.price_change_percent,
-            volume: quote.volume
-          }
-        }
-        return investment
-      })
-      setInvestments(updatedInvestments)
-    }
-  }, [quotes])
 
   const fetchUserProfile = async () => {
     if (!user) return
@@ -121,12 +99,6 @@ const Trade: React.FC = () => {
 
       if (error) throw error
       setInvestments(data || [])
-      
-      // Fetch real-time quotes for all investments
-      const symbols = data?.map(inv => inv.symbol).filter(Boolean) || []
-      if (symbols.length > 0) {
-        fetchQuotes(symbols)
-      }
     } catch (error) {
       console.error('Error fetching investments:', error)
     }
@@ -255,37 +227,10 @@ const Trade: React.FC = () => {
     }
   }
 
-  // Generate chart data for selected stock
+  // Generate mock chart data for selected stock
   const generateChartData = () => {
     if (!selectedStock) return null
 
-    // Try to use real historical data if available
-    const data = historicalData[selectedStock.symbol]
-    if (data && data.length > 0) {
-      const recentData = data.slice(-30) // Last 30 data points
-      const labels = recentData.map(d => new Date(d.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
-      const prices = recentData.map(d => d.close)
-      
-      return {
-        labels,
-        datasets: [
-          {
-            label: selectedStock.symbol,
-            data: prices,
-            borderColor: selectedStock.price_change >= 0 ? '#10B981' : '#EF4444',
-            backgroundColor: selectedStock.price_change >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-            tension: 0.4,
-            fill: true,
-            pointBackgroundColor: selectedStock.price_change >= 0 ? '#10B981' : '#EF4444',
-            pointBorderColor: '#fff',
-            pointBorderWidth: 2,
-            pointRadius: 4,
-          },
-        ],
-      }
-    }
-
-    // Fallback to realistic simulation
     const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
     const basePrice = selectedStock.current_price
     
@@ -365,13 +310,6 @@ const Trade: React.FC = () => {
   const investmentTypes = ['All', ...Array.from(new Set(investments.map(inv => inv.type)))]
   const riskCategories = ['All', 'Conservative', 'Moderate', 'Aggressive']
 
-  // Fetch historical data when stock is selected
-  useEffect(() => {
-    if (selectedStock) {
-      fetchHistoricalData([selectedStock.symbol], chartPeriod)
-    }
-  }, [selectedStock, chartPeriod, fetchHistoricalData])
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -382,7 +320,7 @@ const Trade: React.FC = () => {
       >
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Trade & Research</h1>
-          <p className="text-gray-600">Explore, analyze, and trade various investment options with real-time data</p>
+          <p className="text-gray-600">Explore, analyze, and trade various investment options</p>
         </div>
         <div className="text-right">
           <p className="text-sm text-gray-600">Available Cash</p>
@@ -768,7 +706,7 @@ const Trade: React.FC = () => {
             >
               <TrendingUp className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-500">Select an investment to view research and start trading</p>
-              <p className="text-sm text-gray-400">Choose from stocks, ETFs, bonds, and more with real-time data</p>
+              <p className="text-sm text-gray-400">Choose from stocks, ETFs, bonds, and more</p>
             </motion.div>
           )}
 

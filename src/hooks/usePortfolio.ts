@@ -2,12 +2,10 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { Portfolio, Holding, Transaction } from '../types'
-import { useRealTimeMarketData } from './useRealTimeMarketData'
 import toast from 'react-hot-toast'
 
 export const usePortfolio = () => {
   const { user } = useAuth()
-  const { quotes, fetchQuotes } = useRealTimeMarketData()
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -18,15 +16,20 @@ export const usePortfolio = () => {
   useEffect(() => {
     if (user) {
       fetchPortfolioData()
+      
+      // Set up controlled real-time updates every 30 seconds
+      const interval = setInterval(() => {
+        const now = Date.now()
+        // Only update if it's been at least 30 seconds since last update
+        if (now - lastUpdateTime > 30000) {
+          updateRealTimePrices()
+          setLastUpdateTime(now)
+        }
+      }, 30000)
+      
+      return () => clearInterval(interval)
     }
-  }, [user])
-
-  // Update holdings when market data changes
-  useEffect(() => {
-    if (quotes.length > 0 && holdings.length > 0) {
-      updateHoldingsWithLatestPrices()
-    }
-  }, [quotes])
+  }, [user]) // Only depend on user, not lastUpdateTime to prevent infinite loops
 
   const fetchPortfolioData = async () => {
     if (!user) return
@@ -109,11 +112,13 @@ export const usePortfolio = () => {
         console.error('Holdings error:', holdingsError)
         setHoldings([])
       } else {
+        // Calculate real-time values for holdings with CORRECT financial logic
         const updatedHoldings = holdingsData?.map(holding => {
           const currentPrice = holding.investment_options.current_price
           const avgPrice = holding.avg_price
           const shares = holding.shares
           
+          // CORRECT financial calculations
           const currentValue = shares * currentPrice
           const totalInvested = shares * avgPrice
           const absolutePL = currentValue - totalInvested
@@ -130,12 +135,6 @@ export const usePortfolio = () => {
         }) || []
 
         setHoldings(updatedHoldings)
-        
-        // Fetch real-time quotes for held symbols
-        const symbols = updatedHoldings.map(h => h.symbol).filter(Boolean)
-        if (symbols.length > 0) {
-          fetchQuotes(symbols)
-        }
       }
 
       // Get recent transactions
@@ -163,40 +162,79 @@ export const usePortfolio = () => {
     }
   }
 
-  const updateHoldingsWithLatestPrices = () => {
-    if (holdings.length === 0 || quotes.length === 0) return
-
-    const updatedHoldings = holdings.map(holding => {
-      const quote = quotes.find(q => q.symbol === holding.symbol)
-      if (!quote) return holding
-
-      const currentPrice = quote.current_price
-      const avgPrice = holding.avg_price
-      const shares = holding.shares
-      
-      const currentValue = shares * currentPrice
-      const totalInvested = shares * avgPrice
-      const absolutePL = currentValue - totalInvested
-      const percentPL = totalInvested > 0 ? (absolutePL / totalInvested) * 100 : 0
-
-      return {
-        ...holding,
-        current_price: currentPrice,
-        current_value: currentValue,
-        gain_loss: absolutePL,
-        gain_loss_percent: percentPL
-      }
-    })
-
-    setHoldings(updatedHoldings)
-  }
-
   const updateRealTimePrices = async () => {
     try {
-      // Update prices in database using the market-data function
-      const symbols = holdings.map(h => h.symbol).filter(Boolean)
-      if (symbols.length > 0) {
-        await fetchQuotes(symbols)
+      // Simulate real-time price updates for all active investments
+      const { data: investments } = await supabase
+        .from('investment_options')
+        .select('*')
+        .eq('is_active', true)
+
+      if (investments) {
+        const updates = investments.map(investment => {
+          // Simulate realistic price movement (-2% to +2%)
+          const changePercent = (Math.random() - 0.5) * 0.04
+          const newPrice = investment.current_price * (1 + changePercent)
+          const priceChange = newPrice - investment.current_price
+          const priceChangePercent = (priceChange / investment.current_price) * 100
+
+          return {
+            id: investment.id,
+            current_price: Math.max(newPrice, 0.01), // Ensure price doesn't go negative
+            price_change: priceChange,
+            price_change_percent: priceChangePercent,
+            updated_at: new Date().toISOString()
+          }
+        })
+
+        // Update prices in database
+        for (const update of updates) {
+          await supabase
+            .from('investment_options')
+            .update({
+              current_price: update.current_price,
+              price_change: update.price_change,
+              price_change_percent: update.price_change_percent,
+              updated_at: update.updated_at
+            })
+            .eq('id', update.id)
+        }
+
+        // Refresh holdings data with new prices (but don't show loading)
+        if (portfolio) {
+          const { data: holdingsData } = await supabase
+            .from('holdings')
+            .select(`
+              *,
+              investment_options!inner(current_price, price_change, price_change_percent, name)
+            `)
+            .eq('portfolio_id', portfolio.id)
+
+          if (holdingsData) {
+            const updatedHoldings = holdingsData.map(holding => {
+              const currentPrice = holding.investment_options.current_price
+              const avgPrice = holding.avg_price
+              const shares = holding.shares
+              
+              // CORRECT financial calculations
+              const currentValue = shares * currentPrice
+              const totalInvested = shares * avgPrice
+              const absolutePL = currentValue - totalInvested
+              const percentPL = totalInvested > 0 ? (absolutePL / totalInvested) * 100 : 0
+
+              return {
+                ...holding,
+                current_price: currentPrice,
+                company_name: holding.investment_options.name,
+                current_value: currentValue,
+                gain_loss: absolutePL,
+                gain_loss_percent: percentPL
+              }
+            })
+
+            setHoldings(updatedHoldings)
+          }
+        }
       }
     } catch (error) {
       console.error('Error updating real-time prices:', error)

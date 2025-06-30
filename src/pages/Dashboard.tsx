@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react'
 import { usePortfolio } from '../hooks/usePortfolio'
-import { useRealTimeMarketData } from '../hooks/useRealTimeMarketData'
 import { useAuth } from '../contexts/AuthContext'
 import { motion } from 'framer-motion'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -63,8 +62,6 @@ const Dashboard: React.FC = () => {
     refreshData,
     updateRealTimePrices
   } = usePortfolio()
-  
-  const { historicalData, fetchHistoricalData } = useRealTimeMarketData()
   const [showBalance, setShowBalance] = useState(true)
   const [userRiskProfile, setUserRiskProfile] = useState<string>('')
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -77,16 +74,6 @@ const Dashboard: React.FC = () => {
       checkIfNewUser()
     }
   }, [user])
-
-  // Fetch historical data for portfolio chart
-  useEffect(() => {
-    if (holdings.length > 0) {
-      const symbols = holdings.map(h => h.symbol).filter(Boolean)
-      if (symbols.length > 0) {
-        fetchHistoricalData(symbols, '1M')
-      }
-    }
-  }, [holdings, fetchHistoricalData])
 
   const fetchUserProfile = async () => {
     if (!user) return
@@ -141,43 +128,9 @@ const Dashboard: React.FC = () => {
     }
   }
 
-  // Generate realistic chart data using historical data or fallback
+  // Generate mock chart data with realistic progression
   const generateChartData = () => {
     const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
-    
-    // Try to use real historical data if available
-    if (holdings.length > 0 && Object.keys(historicalData).length > 0) {
-      const primarySymbol = holdings[0]?.symbol
-      const data = historicalData[primarySymbol]
-      
-      if (data && data.length > 0) {
-        // Use actual historical data
-        const recentData = data.slice(-6) // Last 6 data points
-        const actualLabels = recentData.map(d => new Date(d.timestamp).toLocaleDateString('en-US', { month: 'short' }))
-        const actualPrices = recentData.map(d => d.close * holdings[0].shares) // Portfolio value for this holding
-        
-        return {
-          labels: actualLabels,
-          datasets: [
-            {
-              label: 'Portfolio Value',
-              data: actualPrices,
-              borderColor: totalGainLoss >= 0 ? '#10B981' : '#EF4444',
-              backgroundColor: totalGainLoss >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-              tension: 0.4,
-              fill: true,
-              pointBackgroundColor: totalGainLoss >= 0 ? '#10B981' : '#EF4444',
-              pointBorderColor: '#fff',
-              pointBorderWidth: 2,
-              pointRadius: 6,
-              pointHoverRadius: 8,
-            },
-          ],
-        }
-      }
-    }
-    
-    // Fallback to realistic progression
     const baseValue = 10000
     const currentValue = totalValue
     
@@ -226,11 +179,6 @@ const Dashboard: React.FC = () => {
         borderWidth: 1,
         cornerRadius: 12,
         padding: 12,
-        callbacks: {
-          label: function(context: any) {
-            return `Portfolio Value: $${context.parsed.y.toLocaleString()}`
-          }
-        }
       }
     },
     scales: {
