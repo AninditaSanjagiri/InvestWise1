@@ -177,44 +177,7 @@ async function fetchRealHistoricalData(symbol: string, period: string) {
   // const apiKey = Deno.env.get('ALPHA_VANTAGE_API_KEY')
   // const response = await fetch(`https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`)
   
-  const apiKey = Deno.env.get("FINNHUB_API_KEY")
-  const resolutionMap: Record<string, string> = {
-    '1D': '5',   // 5-minute intervals
-    '1W': '30',  // 30-minute intervals
-    '1M': 'D',
-    '3M': 'D',
-    '1Y': 'W',
-  }
-
-  const resolution = resolutionMap[period] || 'D'
-  const count = 100
-  const now = Math.floor(Date.now() / 1000)
-  const past = now - count * 86400 // ~count days ago
-
-  const url = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=${resolution}&from=${past}&to=${now}&token=${apiKey}`
-
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch historical data for ${symbol}`)
-  }
-
-  const json = await response.json()
-  if (json.s !== "ok") {
-    throw new Error(`No historical data returned for ${symbol}`)
-  }
-
-  const data = json.t.map((timestamp: number, index: number) => ({
-    timestamp: new Date(timestamp * 1000).toISOString(),
-    price: json.c[index],
-    volume: json.v[index],
-    open: json.o[index],
-    high: json.h[index],
-    low: json.l[index],
-    close: json.c[index],
-  }))
-
-  return data
-  
+  throw new Error('Real API not configured - using realistic simulation')
 }
 
 function generateRealisticPriceUpdate(quote: any) {
